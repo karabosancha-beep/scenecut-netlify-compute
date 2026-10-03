@@ -1,7 +1,7 @@
 // SceneCut compute-lane build entry.
 // Reads the job spec from INCOMING_HOOK_BODY (URL-encoded form data from a build hook,
 // e.g. `job=probe`), dispatches to a runner, and always leaves dist/ publishable.
-import { writeFileSync, mkdirSync, existsSync, readFileSync } from "node:fs";
+import { writeFileSync, mkdirSync, cpSync, readdirSync, copyFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 import os from "node:os";
 
@@ -60,10 +60,19 @@ writeFileSync(
   JSON.stringify({ ...result, finished_at: new Date().toISOString() }, null, 2),
 );
 
-// dist/ must exist and be publishable.
+// dist/ must exist and be publishable. Static pickup path: the deploy URL
+// serves dist/out/* — a zero-dependency fallback that works even when the
+// Blobs plugin cannot resolve @netlify/blobs in a cloud-build runtime.
+try {
+  cpSync(OUT, "dist/out", { recursive: true });
+} catch (e) {
+  console.log(`[scenecut-lane] dist copy fallback (single files): ${e.message}`);
+  for (const f of readdirSync(OUT)) copyFileSync(`${OUT}/${f}`, `dist/out/${f}`);
+}
 writeFileSync(
   "dist/index.html",
   `<!doctype html><meta charset="utf-8"><title>scenecut compute lane</title>
-<pre>${JSON.stringify(banner, null, 2)}</pre>`,
+<pre>${JSON.stringify(banner, null, 2)}</pre>
+<p><a href="out/">results →</a></p>`,
 );
 console.log(`[scenecut-lane] DONE job=${spec.job} ok=${result.ok !== false}`);

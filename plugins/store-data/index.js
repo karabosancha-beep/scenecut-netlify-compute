@@ -1,14 +1,18 @@
 // store-data — onPostBuild egress for the SceneCut compute lane.
-// Pattern credit: netlify-build-as-compute-kit templates/onpostbuild (Path A, E2E-proven).
-// Variant: egresses EVERY file under /tmp/scenecut-out/ (banner + results + logs),
-// not a single JSONL. NETLIFY_BLOBS_CONTEXT is available here (onPostBuild phase)
-// and getStore() resolves it automatically — no PAT in-runtime.
+// Pattern credit: netlify-build-as-compute-kit templates/onpostbuild.
 //
-// Failure contract: any problem fails the plugin loudly via utils.build.failPlugin.
+// Robustness twist for PATH B (cloud builds): @netlify/blobs is imported
+// DYNAMICALLY inside onPostBuild with a graceful fallback — if the module
+// cannot resolve in a cloud-build local-plugin context, we log the miss and
+// still exit clean (the dist/out/ static-file copy in build.mjs is the
+// fallback pickup path — results land on the deploy URL).
+//
+// Writes: every file under /tmp/scenecut-out/ → store "scenecut-bench"
+//   runs/raw-<ts>/<filename>  — exact bytes
+//   runs/latest               — pointer JSON {run_ts, files[], total_bytes}
 
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { getStore } from "@netlify/blobs";
 
 async function listFiles(dir) {
   const out = [];
@@ -24,6 +28,17 @@ export default {
   onPostBuild: async ({ inputs, utils }) => {
     const srcDir = inputs.path || "/tmp/scenecut-out";
     const storeName = inputs.store || "scenecut-bench";
+
+    let getStore;
+    try {
+      ({ getStore } = await import("@netlify/blobs"));
+    } catch (err) {
+      console.log(
+        `[store-data] @netlify/blobs not resolvable in this runtime (${String(err).slice(0, 120)}) — ` +
+          `falling back to dist/out/ static pickup (build.mjs copies results there)`,
+      );
+      return;
+    }
 
     try {
       const files = await listFiles(srcDir);
@@ -55,7 +70,6 @@ export default {
       console.log(
         `[store-data] EGRESS_OK n=${uploaded.length} bytes=${uploaded.reduce((a, b) => a + b.size, 0)} store=${storeName}`,
       );
-      console.log(`[store-data] NETLIFY_BLOBS_CONTEXT resolved from plugin env (onPostBuild phase)`);
     } catch (err) {
       return utils.build.failPlugin(
         `[store-data] egress failed: ${err && err.message ? err.message : err}`,
