@@ -1,0 +1,4 @@
+name: store-data
+inputs:
+  - name: path
+  - name: store
