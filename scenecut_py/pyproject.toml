@@ -1,0 +1,92 @@
+[project]
+name = "scenecut"
+version = "1.0.0"
+# Keep in sync with scenecut/__init__.py::__version__ (the `scenecut version`
+# command prints it) and the README/SPEC "v1.0" branding.
+description = "Video scene/shot detection & cutting tool with CLI and Web UI"
+readme = "README.md"
+requires-python = ">=3.11"
+keywords = [
+  "video",
+  "scene-detection",
+  "shot-detection",
+  "shot-boundary-detection",
+  "scene-cut",
+  "video-editing",
+  "ffmpeg",
+  "fcpxml",
+  "edl",
+  "pyscenedetect",
+]
+authors = [
+  { name = "karabosancha-beep" },
+]
+maintainers = [
+  { name = "karabosancha-beep" },
+]
+# TODO(license): no LICENSE file exists in the repo and no license is declared
+# in README.md / SPEC.md / package.json. Deliberately NOT set here — do not
+# guess (e.g. MIT). This must be resolved before the first PyPI upload; see
+# docs/pypi.md § "License (unresolved)".
+classifiers = [
+  # No License :: classifier until the license decision is made.
+  "Development Status :: 5 - Production/Stable",
+  "Environment :: Console",
+  "Intended Audience :: End Users/Desktop",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Multimedia :: Video",
+  "Topic :: Multimedia :: Video :: Conversion",
+]
+dependencies = [
+  "typer>=0.9",
+  "scenedetect>=0.7",
+  "opencv-python-headless>=4.8",
+  "numpy>=1.24",
+  "pillow>=10",
+  "yt-dlp>=2024",
+  "ffmpeg-python>=0.2",
+]
+
+[project.optional-dependencies]
+# D13: TransNetV2 neural pass. NOTE (R4): Linux pip resolves torch to the
+# CUDA build (~2-3GB). CPU-only: pip install torch --index-url
+# https://download.pytorch.org/whl/cpu FIRST, then scenecut[neural].
+# (A per-extra --index-url cannot be expressed in PEP 621 — see docs/pypi.md.)
+neural = [
+  "transnetv2-pytorch==1.0.5",
+  "torch>=2.4,<3",
+]
+
+[project.urls]
+Homepage = "https://github.com/karabosancha-beep/scenecut"
+Repository = "https://github.com/karabosancha-beep/scenecut"
+Issues = "https://github.com/karabosancha-beep/scenecut/issues"
+Changelog = "https://github.com/karabosancha-beep/scenecut/releases"
+
+[project.scripts]
+# Console script. `scenecut.cli:app` is the top-level typer.Typer instance —
+# the exact callable `python -m scenecut` invokes in scenecut/__main__.py,
+# so both entry paths stay in lockstep.
+scenecut = "scenecut.cli:app"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["scenecut*"]
+
+[tool.coverage.run]
+# Measure only the shipped `scenecut` package. The one-off measurement /
+# bench tooling in scripts/ lives outside the package, so it is out of scope
+# by construction — no `omit` list is needed and no real module code is
+# excluded.
+source = ["scenecut"]
+
+[tool.coverage.report]
+# Show missing line numbers in the term report (CI job log).
+show_missing = true

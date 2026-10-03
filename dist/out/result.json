@@ -1,8 +1,0 @@
-{
-  "job": "probe",
-  "ok": true,
-  "python": "Python 3.12.14",
-  "node": "v24.21.0",
-  "wall_s": 0,
-  "finished_at": "2026-10-03T05:51:42.540Z"
-}

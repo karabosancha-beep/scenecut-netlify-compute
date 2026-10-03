@@ -1,0 +1,18 @@
+# SceneCut sdist manifest
+# -----------------------
+# WHEEL: ships only the `scenecut` package (see [tool.setuptools.packages.find]
+#        in pyproject.toml) — no tests, no dev scripts, no sample fixtures.
+# SDIST: kept complete and locally testable out of the box:
+#   * tests/   — pytest suite (conftest.py regenerates missing video fixtures)
+#   * samples/ — committed test fixtures + ground truth (~7 MB)
+#   * scripts/ — one-off dev / bench tooling, kept for reproducibility but NOT
+#                installed by the wheel
+#   * SPEC.md  — the design spec
+
+include README.md
+include SPEC.md
+recursive-include tests *.py
+recursive-include scripts *.py *.ts
+recursive-include samples *
+global-exclude *.py[cod]
+prune tests/.pytest_cache

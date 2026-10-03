@@ -3,7 +3,7 @@
 // e.g. `job=pyprobe` or `job=sbd&n=200`), dispatches to a runner, captures a full log,
 // and leaves dist/out/ publishable — the static pickup path for the orchestrator:
 //   https://<branch>--<site>.netlify.app/out/{banner.json,result.json,log.txt,...}
-import { writeFileSync, mkdirSync, cpSync } from "node:fs";
+import { writeFileSync, mkdirSync, cpSync, readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 import os from "node:os";
 
@@ -34,14 +34,14 @@ console.log(`[scenecut-lane] banner: ${JSON.stringify(banner)}`);
 
 // --- dispatch ---------------------------------------------------------------
 const t0 = Date.now();
-function runBash(script, args = []) {
+function runBash(script, args = [], extraEnv = {}) {
   const cmd = `bash runners/${script} ${args.join(" ")}`;
   try {
     const stdout = execSync(cmd, {
       encoding: "utf8",
       timeout: 9 * 60 * 1000, // leave headroom under the build cap
       maxBuffer: 32 * 1024 * 1024,
-      env: { ...process.env, OUT_DIR: OUT },
+      env: { ...process.env, OUT_DIR: OUT, ...extraEnv },
     });
     return { ok: true, stdout };
   } catch (e) {
@@ -60,6 +60,25 @@ switch (spec.job) {
   case "pyprobe": {
     const r = runBash("pyprobe.sh");
     result = { job: "pyprobe", ok: r.ok, log_tail: r.stdout.split("\n").slice(-14).join("\n") };
+    writeFileSync(`${OUT}/log.txt`, r.stdout);
+    break;
+  }
+  case "sbd": {
+    // hook-body knobs: job=sbd&real=60&syn=40&budget=420&fetch_tmo=240&bench_cap=470
+    const env = {};
+    for (const k of ["real", "syn", "budget", "fetch_tmo", "bench_cap"]) {
+      if (spec[k] !== undefined) env[`SBD_${k.toUpperCase()}`] = String(spec[k]);
+    }
+    const r = runBash("sbd.sh", [], env);
+    // inline the aggregate so result.json is self-contained for the orchestrator
+    let metrics = null;
+    try {
+      metrics = JSON.parse(readFileSync(`${OUT}/external_sbd_default.json`, "utf8")).aggregate ?? null;
+    } catch {}
+    result = {
+      job: "sbd", ok: r.ok, metrics,
+      log_tail: r.stdout.split("\n").slice(-14).join("\n"),
+    };
     writeFileSync(`${OUT}/log.txt`, r.stdout);
     break;
   }
