@@ -1,8 +1,0 @@
-{
-  "job": "probe",
-  "ok": true,
-  "python": "Python 3.12.14",
-  "node": "v24.21.0",
-  "evidence": "cloud build ran this code; see banner.json timestamps",
-  "finished_at": "2026-10-03T05:48:33.355Z"
-}

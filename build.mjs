@@ -1,7 +1,9 @@
-// SceneCut compute-lane build entry.
+// SceneCut compute-lane build entry (Netlify Path B — cloud builds).
 // Reads the job spec from INCOMING_HOOK_BODY (URL-encoded form data from a build hook,
-// e.g. `job=probe`), dispatches to a runner, and always leaves dist/ publishable.
-import { writeFileSync, mkdirSync, cpSync, readdirSync, copyFileSync } from "node:fs";
+// e.g. `job=pyprobe` or `job=sbd&n=200`), dispatches to a runner, captures a full log,
+// and leaves dist/out/ publishable — the static pickup path for the orchestrator:
+//   https://<branch>--<site>.netlify.app/out/{banner.json,result.json,log.txt,...}
+import { writeFileSync, mkdirSync, cpSync } from "node:fs";
 import { execSync } from "node:child_process";
 import os from "node:os";
 
@@ -31,48 +33,52 @@ writeFileSync(`${OUT}/banner.json`, JSON.stringify(banner, null, 2));
 console.log(`[scenecut-lane] banner: ${JSON.stringify(banner)}`);
 
 // --- dispatch ---------------------------------------------------------------
-const runners = {
-  probe: () => {
-    // Minimal end-to-end proof: compute + timestamps + a python3 sanity check.
+const t0 = Date.now();
+function runBash(script, args = []) {
+  const cmd = `bash runners/${script} ${args.join(" ")}`;
+  try {
+    const stdout = execSync(cmd, {
+      encoding: "utf8",
+      timeout: 9 * 60 * 1000, // leave headroom under the build cap
+      maxBuffer: 32 * 1024 * 1024,
+      env: { ...process.env, OUT_DIR: OUT },
+    });
+    return { ok: true, stdout };
+  } catch (e) {
+    return { ok: false, stdout: String(e.stdout ?? "") + String(e.stderr ?? "") + `\nEXIT ${e.status}` };
+  }
+}
+
+let result;
+switch (spec.job) {
+  case "probe": {
     let py = "n/a";
     try { py = execSync("python3 --version").toString().trim(); } catch {}
-    return {
-      job: "probe",
-      ok: true,
-      python: py,
-      node: process.version,
-      evidence: "cloud build ran this code; see banner.json timestamps",
-    };
-  },
-};
-
-const runner = runners[spec.job] ?? runners.probe;
-let result;
-try {
-  result = await runner();
-} catch (e) {
-  result = { job: spec.job, ok: false, error: String(e) };
+    result = { job: "probe", ok: true, python: py, node: process.version };
+    break;
+  }
+  case "pyprobe": {
+    const r = runBash("pyprobe.sh");
+    result = { job: "pyprobe", ok: r.ok, log_tail: r.stdout.split("\n").slice(-14).join("\n") };
+    writeFileSync(`${OUT}/log.txt`, r.stdout);
+    break;
+  }
+  default:
+    result = { job: spec.job, ok: false, error: `unknown job '${spec.job}'` };
 }
 
-// Result JSONL (append semantics across retries are handled by ts keys).
-writeFileSync(
-  `${OUT}/result-${Date.now()}.json`,
-  JSON.stringify({ ...result, finished_at: new Date().toISOString() }, null, 2),
-);
+result.wall_s = Math.round((Date.now() - t0) / 1000);
+result.finished_at = new Date().toISOString();
+writeFileSync(`${OUT}/result.json`, JSON.stringify(result, null, 2));
 
-// dist/ must exist and be publishable. Static pickup path: the deploy URL
-// serves dist/out/* — a zero-dependency fallback that works even when the
-// Blobs plugin cannot resolve @netlify/blobs in a cloud-build runtime.
-try {
-  cpSync(OUT, "dist/out", { recursive: true });
-} catch (e) {
-  console.log(`[scenecut-lane] dist copy fallback (single files): ${e.message}`);
-  for (const f of readdirSync(OUT)) copyFileSync(`${OUT}/${f}`, `dist/out/${f}`);
-}
+// --- static pickup path ------------------------------------------------------
+// dist/out/* is served by the deploy URL — a zero-dependency path that works
+// even when the Blobs plugin cannot resolve @netlify/blobs in a cloud-build runtime.
+cpSync(OUT, "dist/out", { recursive: true });
 writeFileSync(
   "dist/index.html",
   `<!doctype html><meta charset="utf-8"><title>scenecut compute lane</title>
 <pre>${JSON.stringify(banner, null, 2)}</pre>
-<p><a href="out/">results →</a></p>`,
+<p><a href="out/result.json">result.json</a> · <a href="out/log.txt">log.txt</a></p>`,
 );
-console.log(`[scenecut-lane] DONE job=${spec.job} ok=${result.ok !== false}`);
+console.log(`[scenecut-lane] DONE job=${spec.job} ok=${result.ok !== false} wall=${result.wall_s}s`);
