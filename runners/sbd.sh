@@ -148,7 +148,12 @@ done
 cp bench/external_sbd_default.json "$OUT_DIR/"
 [ -f bench/.external_sbd_default.state.json ] \
   && cp bench/.external_sbd_default.state.json "$OUT_DIR/"
+# Netlify does not SERVE leading-dot files from the publish dir — also copy
+# the state under a visible name so it is fetchable from the deploy URL.
+[ -f bench/.external_sbd_default.state.json ] \
+  && cp bench/.external_sbd_default.state.json "$OUT_DIR/external_sbd_default.state.json"
 cp datasets/sbd/gt.json "$OUT_DIR/sbd_gt.json"
+log "outputs copied to $OUT_DIR: $(ls "$OUT_DIR" | tr '\n' ' ')"
 "$PY" - <<'PYEOF'
 import json, sys
 rep = json.load(open("bench/external_sbd_default.json"))
